@@ -1,6 +1,6 @@
-# ICON schedule
+# ICON monitoring
 # NAME Weather
-# DESC Web weather.
+# DESC Current weather conditions.
 
 import gc
 import time
@@ -120,7 +120,7 @@ def weather_code_to_icon(code):
 
 
 # ----------------------------
-# Icon drawing (Option A)
+# Icon drawing
 # ----------------------------
 
 def draw_sun(display, x, y, r):
@@ -129,38 +129,40 @@ def draw_sun(display, x, y, r):
     display.circle(x, y, r)
 
     # rays
-    for deg in range(0, 360, 30):
+    for deg in range(0, 360, 45):
         a = math.radians(deg)
-        x1 = x + int(math.cos(a) * (r + 6))
-        y1 = y + int(math.sin(a) * (r + 6))
-        x2 = x + int(math.cos(a) * (r + 18))
-        y2 = y + int(math.sin(a) * (r + 18))
+        x1 = x + int(math.cos(a) * (r + 8))
+        y1 = y + int(math.sin(a) * (r + 8))
+        x2 = x + int(math.cos(a) * (r + 20))
+        y2 = y + int(math.sin(a) * (r + 20))
         display.line(x1, y1, x2, y2)
 
 
 def draw_cloud(display, x, y):
-    GREY = display.create_pen(210, 210, 210)
+    GREY = display.create_pen(220, 220, 230)
     display.set_pen(GREY)
-    display.circle(x - 22, y + 2, 16)
-    display.circle(x, y - 10, 22)
-    display.circle(x + 24, y + 2, 15)
-    display.rectangle(x - 45, y + 2, 90, 28)
+    # Fluffier cloud
+    display.circle(x - 20, y + 5, 18)
+    display.circle(x, y - 8, 24)
+    display.circle(x + 20, y + 5, 18)
+    display.rectangle(x - 20, y + 5, 40, 20)
 
 
 def draw_rain(display, x, y):
     draw_cloud(display, x, y)
-    BLUE = display.create_pen(80, 160, 255)
+    BLUE = display.create_pen(100, 180, 255)
     display.set_pen(BLUE)
-    for i in (-22, -2, 18, 38):
-        display.line(x + i, y + 34, x + i - 6, y + 54)
+    # nice angled rain
+    for i in range(-15, 25, 10):
+        display.line(x + i, y + 25, x + i - 8, y + 45)
 
 
 def draw_snow(display, x, y):
     draw_cloud(display, x, y)
     WHITE = display.create_pen(255, 255, 255)
     display.set_pen(WHITE)
-    for i in (-18, 2, 22, 40):
-        display.circle(x + i, y + 46, 4)
+    for i in (-15, 0, 15):
+        display.circle(x + i, y + 35, 3)
 
 
 def draw_storm(display, x, y):
@@ -168,31 +170,30 @@ def draw_storm(display, x, y):
     YELLOW = display.create_pen(255, 220, 0)
     display.set_pen(YELLOW)
     # lightning bolt
-    display.line(x + 5, y + 30, x - 8, y + 52)
-    display.line(x - 8, y + 52, x + 10, y + 52)
-    display.line(x + 10, y + 52, x - 2, y + 70)
+    display.line(x + 5, y + 20, x - 5, y + 40)
+    display.line(x - 5, y + 40, x + 8, y + 40)
+    display.line(x + 8, y + 40, x, y + 60)
 
 
 def draw_fog(display, x, y):
     draw_cloud(display, x, y)
-    FOG = display.create_pen(180, 180, 180)
+    FOG = display.create_pen(180, 180, 200)
     display.set_pen(FOG)
-    # fog lines
-    display.line(x - 45, y + 40, x + 45, y + 40)
-    display.line(x - 35, y + 52, x + 35, y + 52)
-    display.line(x - 25, y + 64, x + 25, y + 64)
+    # longer fog lines
+    for i in range(25, 55, 10):
+        display.line(x - 30, y + i, x + 30, y + i)
 
 
 def draw_unknown(display, x, y):
     WHITE = display.create_pen(255, 255, 255)
     display.set_pen(WHITE)
-    display.set_font("bitmap8")
-    display.text("?", x - 6, y - 10, scale=5)
+    display.set_font("sans")
+    display.text("?", x - 10, y - 20, scale=1.5)
 
 
 def draw_icon(display, icon, x, y):
     if icon == "sun":
-        draw_sun(display, x, y, 22)
+        draw_sun(display, x, y, 24)
     elif icon == "cloud":
         draw_cloud(display, x, y)
     elif icon == "rain":
@@ -213,35 +214,58 @@ def draw_icon(display, icon, x, y):
 
 def draw_screen(presto, title, temp_c, desc, updated, icon):
     display = presto.display
+    width, height = display.get_bounds()
 
-    BLACK = display.create_pen(0, 0, 0)
-    WHITE = display.create_pen(255, 255, 255)
-    CYAN = display.create_pen(0, 255, 255)
+    # Palette
+    BG = display.create_pen(10, 10, 20)  # Very dark blue/black
+    TEXT = display.create_pen(240, 240, 245)  # Off-white
+    ACCENT = display.create_pen(100, 200, 255)  # Sky blue
+    DIM = display.create_pen(100, 100, 120)  # Dim grey
 
-    display.set_pen(BLACK)
+    display.set_pen(BG)
     display.clear()
 
-    # Header
-    display.set_pen(CYAN)
-    display.set_font("bitmap8")
-    display.text(title, 10, 10, scale=2)
+    # 1. Location Header
+    display.set_pen(ACCENT)
+    display.set_font("sans")
+    # Centered title? simple generic x=10 for now, but clean font
+    display.text(title, 10, 25, scale=0.8)
 
-    # Icon (top-right-ish)
-    draw_icon(display, icon, 250, 90)
+    # 2. Main Content (Split view)
+    # Left: Icon, Right: Temp
+    
+    icon_x = 70
+    icon_y = 110
+    draw_icon(display, icon, icon_x, icon_y)
 
-    # Temperature
-    display.set_pen(WHITE)
-    display.set_font("bitmap8")
+    display.set_pen(TEXT)
     if temp_c is None:
-        display.text("No data", 10, 70, scale=3)
+        display.text("--", 120, 80, scale=3.0)
     else:
-        display.text("{:.1f}C".format(temp_c), 10, 70, scale=5)
+        # Large, thin temp
+        t_str = "{:.0f}".format(temp_c)
+        
+        # Right align to x=220 (margin of 20)
+        # Measure temp and degree symbol
+        w_temp = display.measure_text(t_str, scale=3.0)
+        w_deg = display.measure_text("°", scale=1.5)
+        
+        total_w = w_temp + w_deg
+        start_x = 220 - total_w
+        
+        display.text(t_str, start_x, 80, scale=3.0)
+        
+        # Small superscript degree symbol
+        display.text("°", start_x + w_temp, 60, scale=1.5)
 
-    # Description + time
-    display.set_font("bitmap8")
-    display.text(desc, 10, 150, scale=2)
+    # 3. Description
+    display.set_pen(TEXT)
+    display.text(desc, 10, 170, scale=1.0)
+
+    # 4. Footer
     if updated:
-        display.text("Updated: {}".format(updated), 10, 200, scale=1)
+        display.set_pen(DIM)
+        display.text("Updated " + updated[-5:], 10, 215, scale=0.6)
 
     presto.update()
 
@@ -257,7 +281,7 @@ def main():
     presto.connect()
 
     lat, lon, name, region = geocode_place(PLACE_NAME, COUNTRY)
-    title = name if not region else "{} ({})".format(name, region)
+    title = name 
 
     while True:
         try:
