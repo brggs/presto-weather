@@ -20,6 +20,7 @@ except ImportError:
 
 PLACE_NAME = "London"
 COUNTRY = "GB"
+TEMPERATURE_UNIT = "celsius" # Set to "celsius" or "fahrenheit"
 REFRESH_SECONDS = 10 * 60
 
 
@@ -63,15 +64,25 @@ def fetch_current_weather(lat: float, lon: float):
         "https://api.open-meteo.com/v1/forecast"
         "?latitude={}&longitude={}"
         "&current=temperature_2m,weather_code"
+        "&daily=precipitation_probability_max"
         "&timezone=auto"
-    ).format(lat, lon)
+        "&temperature_unit={}"
+    ).format(lat, lon, TEMPERATURE_UNIT)
 
     data = http_get_json(url)
     current = data.get("current", {})
-    temp_c = current.get("temperature_2m", None)
+    daily = data.get("daily", {})
+    temperature = current.get("temperature_2m", None)
     code = current.get("weather_code", None)
     ts = current.get("time", "")
-    return temp_c, code, ts
+    
+    rain_prob = None
+    if daily and "precipitation_probability_max" in daily:
+        probs = daily["precipitation_probability_max"]
+        if probs:
+            rain_prob = probs[0]
+            
+    return temperature, code, ts, rain_prob
 
 
 # ----------------------------
@@ -212,60 +223,87 @@ def draw_icon(display, icon, x, y):
 # UI
 # ----------------------------
 
-def draw_screen(presto, title, temp_c, desc, updated, icon):
+def measure_text_spaced(display, text, scale, spacing):
+    width = 0
+    for char in text:
+        w = display.measure_text(char, scale=scale)
+        width += w + spacing
+    return width - spacing if width > 0 else 0
+
+def draw_text_spaced(display, text, x, y, scale, spacing):
+    offset = 0
+    for char in text:
+        display.text(char, x + offset, y, scale=scale)
+        w = display.measure_text(char, scale=scale)
+        offset += w + spacing
+
+def draw_screen(presto, title, temperature, desc, updated, icon, rain_prob):
     display = presto.display
     width, height = display.get_bounds()
 
     # Palette
     BG = display.create_pen(10, 10, 20)  # Very dark blue/black
-    TEXT = display.create_pen(240, 240, 245)  # Off-white
+    PRIMARY = display.create_pen(240, 240, 245)  # Off-white
     ACCENT = display.create_pen(100, 200, 255)  # Sky blue
     DIM = display.create_pen(100, 100, 120)  # Dim grey
 
     display.set_pen(BG)
     display.clear()
 
-    # 1. Location Header
+    # Location
     display.set_pen(ACCENT)
     display.set_font("sans")
-    # Centered title? simple generic x=10 for now, but clean font
+    
     display.text(title, 10, 25, scale=0.8)
 
-    # 2. Main Content (Split view)
+    # Main Content (Split view)
     # Left: Icon, Right: Temp
-    
-    icon_x = 70
-    icon_y = 110
-    draw_icon(display, icon, icon_x, icon_y)
+    draw_icon(display, icon, 70, 110)
 
-    display.set_pen(TEXT)
-    if temp_c is None:
+    display.set_pen(PRIMARY)
+    if temperature is None:
         display.text("--", 120, 80, scale=3.0)
     else:
         # Large, thin temp
-        t_str = "{:.0f}".format(temp_c)
+        t_str = "{:.0f}".format(temperature)
+        spacing = -8
         
         # Right align to x=220 (margin of 20)
         # Measure temp and degree symbol
-        w_temp = display.measure_text(t_str, scale=3.0)
+        w_temp = measure_text_spaced(display, t_str, scale=3.0, spacing=spacing)
         w_deg = display.measure_text("°", scale=1.5)
         
         total_w = w_temp + w_deg
         start_x = 220 - total_w
-        
-        display.text(t_str, start_x, 80, scale=3.0)
+
+        # Draw shadow
+        display.set_pen(DIM)
+        display.set_thickness(5)
+        draw_text_spaced(display, t_str, start_x+2, 80+2, scale=3.0, spacing=spacing)
+
+        # Draw temperature
+        display.set_pen(PRIMARY)
+        draw_text_spaced(display, t_str, start_x, 80, scale=3.0, spacing=spacing)
         
         # Small superscript degree symbol
+        display.set_thickness(2)
         display.text("°", start_x + w_temp, 60, scale=1.5)
 
-    # 3. Description
-    display.set_pen(TEXT)
-    display.text(desc, 10, 170, scale=1.0)
+        display.set_thickness(1)
 
-    # 4. Footer
+    # Description
+    display.set_pen(PRIMARY)
+    display.text(desc, 10, 180, scale=1.0)
+    
+    if rain_prob is not None:
+        display.set_pen(ACCENT)
+        display.set_font("bitmap8")
+        display.text("Chance of rain: {}%".format(rain_prob), 20, 205, scale=1)
+
+    # Footer
     if updated:
         display.set_pen(DIM)
-        display.text("Updated " + updated[-5:], 10, 215, scale=0.6)
+        display.text("Updated " + updated[-5:], 170, 225, scale=1)
 
     presto.update()
 
@@ -285,12 +323,12 @@ def main():
 
     while True:
         try:
-            temp_c, code, updated = fetch_current_weather(lat, lon)
+            temp_c, code, updated, rain_prob = fetch_current_weather(lat, lon)
             desc = weather_code_to_text(code)
             icon = weather_code_to_icon(code)
-            draw_screen(presto, title, temp_c, desc, updated, icon)
+            draw_screen(presto, title, temp_c, desc, updated, icon, rain_prob)
         except Exception as e:
-            draw_screen(presto, title, None, "Error: {}".format(e), "", "unknown")
+            draw_screen(presto, title, None, "Error: {}".format(e), "", "unknown", None)
 
         time.sleep(REFRESH_SECONDS)
 
